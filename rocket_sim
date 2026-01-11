@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rocket Trajectory Simulator</title>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; }
+label { display: block; margin: 6px 0; }
+input { margin-left: 10px; }
+button { margin-top: 10px; padding: 6px 12px; }
+.plot { width: 90%; height: 400px; margin-top: 20px; }
+</style>
+</head>
+
+<body>
+
+<h1>Rocket Trajectory Simulator</h1>
+
+<label>Initial height (m):
+    <input type="number" id="h0" value="0">
+</label>
+
+<label>Force (N):
+    <input type="number" id="force" value="1000">
+</label>
+
+<label>Mass (kg):
+    <input type="number" id="mass" value="50">
+</label>
+
+<label>Acceleration time (s):
+    <input type="number" id="t_acc" value="5">
+</label>
+
+<label>Target distance (m):
+    <input type="number" id="target" value="300">
+</label>
+
+<button onclick="simulate()">Simulate</button>
+
+<div id="info" style="margin-top:12px; font-weight:bold;"></div>
+
+<div id="timePlot" class="plot"></div>
+<div id="trajPlot" class="plot"></div>
+
+<script>
+function simulate() {
+
+    const h0 = Number(document.getElementById("h0").value);
+    const F = Number(document.getElementById("force").value);
+    const m = Number(document.getElementById("mass").value);
+    const t_acc = Number(document.getElementById("t_acc").value);
+    const target = Number(document.getElementById("target").value);
+
+    const g = 9.8;
+    const a = F / m;
+
+    let bestAngle = 0;
+    let bestError = Infinity;
+    let best = null;
+
+    // --- FIND IDEAL ANGLE ---
+    for (let deg = 0; deg <= 90; deg += 0.1) {
+        const θ = deg * Math.PI / 180;
+
+        const vx = a * Math.cos(θ) * t_acc;
+        const vy = (a * Math.sin(θ) - g) * t_acc;
+
+        const x1 = 0.5 * a * Math.cos(θ) * t_acc ** 2;
+        const y1 = h0 + 0.5 * (a * Math.sin(θ) - g) * t_acc ** 2;
+
+        const disc = vy * vy + 2 * g * y1;
+        if (disc < 0) continue;
+
+        const t_free = (vy + Math.sqrt(disc)) / g;
+        const range = x1 + vx * t_free;
+
+        const err = Math.abs(range - target);
+        if (err < bestError) {
+            bestError = err;
+            bestAngle = deg;
+            best = { θ, vx, vy, x1, y1, t_free, range };
+        }
+    }
+
+    // --- ACCELERATION PHASE ---
+    const n = 400;
+    const tA = Array.from({length: n}, (_, i) => i * t_acc / n);
+    const xA = tA.map(t => 0.5 * a * Math.cos(best.θ) * t * t);
+    const yA = tA.map(t => h0 + 0.5 * (a * Math.sin(best.θ) - g) * t * t);
+
+    // --- FREEFALL PHASE ---
+    const tF = Array.from({length: n}, (_, i) => i * best.t_free / n);
+    const xF = tF.map(t => best.x1 + best.vx * t);
+    const yF = tF.map(t => best.y1 + best.vy * t - 0.5 * g * t * t);
+
+    const maxHeight = Math.max(...yA, ...yF);
+
+    document.getElementById("info").innerText =
+        `Ideal angle: ${bestAngle.toFixed(2)}°\n` +
+        `Distance: ${best.range.toFixed(2)} m\n` +
+        `Max height: ${maxHeight.toFixed(2)} m`;
+
+    // --- HEIGHT vs TIME ---
+    Plotly.newPlot("timePlot", [
+        {
+            x: tA,
+            y: yA,
+            mode: "lines",
+            name: "Acceleration",
+            line: { color: "blue" }
+        },
+        {
+            x: tF.map(t => t + t_acc),
+            y: yF,
+            mode: "lines",
+            name: "Freefall",
+            line: { color: "red" }
+        }
+    ], {
+        title: "Height vs Time (d(t))",
+        xaxis: { title: "Time (s)" },
+        yaxis: { title: "Height (m)", range: [0, maxHeight * 1.05] }
+    });
+
+    // --- HEIGHT vs DISTANCE ---
+    Plotly.newPlot("trajPlot", [
+        {
+            x: xA,
+            y: yA,
+            mode: "lines",
+            name: "Acceleration",
+            line: { color: "blue" }
+        },
+        {
+            x: xF,
+            y: yF,
+            mode: "lines",
+            name: "Freefall",
+            line: { color: "red" }
+        }
+    ], {
+        title: "Height vs Distance (y(x))",
+        xaxis: { title: "Horizontal Distance (m)" },
+        yaxis: { title: "Height (m)", range: [0, maxHeight * 1.05] }
+    });
+}
+</script>
+
+</body>
+</html>
